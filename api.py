@@ -83,7 +83,6 @@ class Mask:
 
 def getMasks(region_labels):
     labels = np.unique(region_labels.flatten() - 1)
-    print(labels, file=sys.stderr)
     n_labels = labels.shape[0]
     masks = []
     for i in range(n_labels):
@@ -138,23 +137,27 @@ def exportPolygonListToJson(myList):
     return export
 
 def getOrientation(points):
+    if(len(points) > 0):
+        p_arr = np.asarray(points).reshape((len(points[0]), 2))
 
-    p_arr = np.asarray(points).reshape((len(points[0]), 2))
+        rect = cv2.minAreaRect(p_arr)
+        box = cv2.boxPoints(rect) # cv2.boxPoints(rect) for OpenCV 3.x
+        box = np.int32(box)
 
 
-    rect = cv2.minAreaRect(p_arr)
-    box = cv2.boxPoints(rect) # cv2.boxPoints(rect) for OpenCV 3.x
-    box = np.int8(box)
+        edge1 = box[0] - box[1]
+        edge2 = box[0] - box[3]
+        edge1norm = np.linalg.norm(edge1)
+        edge2norm = np.linalg.norm(edge2)
+        edge = edge1
+        if(edge2norm > edge1norm): edge = edge2
+        print(edge, file=sys.stderr)
+        if(edge[0] < 0):
+            edge *= -1
 
-
-    edge1 = box[0] - box[1]
-    edge2 = box[0] - box[3]
-    edge1norm = np.linalg.norm(edge1)
-    edge2norm = np.linalg.norm(edge2)
-    edge = edge1
-    if(edge2norm > edge1norm): edge = edge2
-    if(edge[0] < 0): edge *= -1
-    return edge
+        print(edge, file=sys.stderr)
+        return edge
+    return np.array([1,0])
 
 def processImage(path, filename):
     n_colors = 12
@@ -178,6 +181,8 @@ def processImage(path, filename):
         img_mode = img_mode.filter(ImageFilter.ModeFilter(15))
 
     img_lowres = img_mode.convert("RGB")
+    if os.path.exists(path + "_lowres.jpg"):
+        os.remove(path + "_lowres.jpg")
     img_lowres.save(path + "_lowres.jpg", "JPEG")
 
     class_labels = np.array(img_mode)
@@ -198,7 +203,7 @@ def processImage(path, filename):
     for num in range(n_masks):
         _map = masks[num].getMap().astype('uint8')
         _map_img = Image.fromarray(np.uint8(_map))
-        _map_img = _map_img.filter(ImageFilter.MinFilter(5))
+        _map_img = _map_img.filter(ImageFilter.MinFilter(3))
         _map = np.array(_map_img)
 
         mask_img_img = Image.fromarray(np.uint8(cm.gist_earth(_map)*255))
@@ -206,8 +211,6 @@ def processImage(path, filename):
 
 
         ret, thresh = cv2.threshold(_map, 127, 255, cv2.THRESH_BINARY)
-        print(region_labels, file=sys.stderr)
-        print("---------------------------------------------------------------------------------------------------------------", file=sys.stderr)
         contour, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         # contour, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         contours.append(contour)
@@ -220,9 +223,10 @@ def processImage(path, filename):
         mypoly = MyPolygon()
         mypoly.setOrientation(orientations[i])
         polygonList.append(mypoly)
-        myc = contours[i][0]
-        for pi in range(len(myc)):
-            mypoly.add(myc[pi][0][0], myc[pi][0][1])
+        if(len(contours[i]) > 0):
+            myc = contours[i][0]
+            for pi in range(len(myc)):
+                mypoly.add(myc[pi][0][0], myc[pi][0][1])
 
     return exportPolygonListToJson(polygonList)
 
@@ -231,7 +235,6 @@ def upload_file():
     # session.init_app(app)
 
     if request.method == 'POST':
-        print(request.files)
         # check if the post request has the file part
         if 'file' not in request.files:
             flash('No file part')
@@ -242,8 +245,6 @@ def upload_file():
         if file.filename == '':
             flash('No selected file')
             return redirect(request.url)
-        print(file)
-        print(file.filename)
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
