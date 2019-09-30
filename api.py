@@ -197,7 +197,9 @@ def processImage(path, filename):
     c = []
     for num in range(n_masks):
         _map = masks[num].getMap().astype('uint8')
-
+        _map_img = Image.fromarray(np.uint8(_map))
+        _map_img = _map_img.filter(ImageFilter.MinFilter(5))
+        _map = np.array(_map_img)
 
         mask_img_img = Image.fromarray(np.uint8(cm.gist_earth(_map)*255))
         mask_img_img.save(path + "_mask.jpg", "PNG")
